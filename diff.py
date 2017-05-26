@@ -35,6 +35,7 @@ def diff(a_filter, b_filter):
             "groupby": "source.file.name",
             "where": {"and": [
                 {"or": [a_filter, b_filter]},
+                # {"eq": {"source.is_file": "T"}},
                 {"gt": {"source.file.total_covered": 0}}
             ]},
             "limit": 50000,
@@ -69,7 +70,7 @@ def diff(a_filter, b_filter):
             data=value2json({
                 "from": "coverage",
                 "select": {"source.file.covered", "source.file.name"} | variables,
-                "where": {"and":[
+                "where": {"and": [
                     {"or": [a_filter, b_filter]},
                     {"terms": {"source.file.name": files}}
                 ]},
@@ -108,18 +109,32 @@ def diff(a_filter, b_filter):
 
 
 def main():
+
+    # FIND A REVISION WITH e10s
+    # {
+    # 	"from":"task",
+    # 	"select":[{"value":"run.timestamp","aggregate":"max"}],
+    # 	"groupby":["repo.changeset.id12"],
+    # 	"where":{"and":[
+    # 		{"regex":{"run.name":".*cov.*"}},
+    # 		{"eq":{"run.type":"e10s"}},
+    # 		{"gt":{"run.timestamp":{"date":"today-2day"}}}
+    # 	]}
+    # }
+
+
     try:
         settings = startup.read_settings()
         constants.set(settings.constants)
         Log.start(settings.debug)
 
         a_filter = {"and": [
-            {"eq": {"repo.changeset.id12": "4f65588b80a6"}},
+            {"eq": {"repo.changeset.id12": "37d777d87200"}},
             {"eq": {"run.suite.name": "mochitest"}},
             {"ne": {"build.type": "e10s"}}
         ]}
         b_filter = {"and": [
-            {"eq": {"repo.changeset.id12": "4f65588b80a6"}},
+            {"eq": {"repo.changeset.id12": "37d777d87200"}},
             {"eq": {"run.suite.name": "mochitest"}},
             {"eq": {"build.type": "e10s"}}
         ]}
@@ -129,8 +144,6 @@ def main():
         Log.error("Problem with etl", e)
     finally:
         Log.stop()
-        # write_profile(Data(filename="startup.tab"), [pstats.Stats(cprofiler)])
-
 
 if __name__ == "__main__":
     main()
