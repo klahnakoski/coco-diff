@@ -35,7 +35,7 @@ def diff(a_filter, b_filter):
             "groupby": "source.file.name",
             "where": {"and": [
                 {"or": [a_filter, b_filter]},
-                # {"eq": {"source.is_file": "T"}},
+                {"eq": {"source.is_file": "T"}},
                 {"gt": {"source.file.total_covered": 0}}
             ]},
             "limit": 50000,
@@ -118,7 +118,7 @@ def main():
     # 	"where":{"and":[
     # 		{"regex":{"run.name":".*cov.*"}},
     # 		{"eq":{"run.type":"e10s"}},
-    # 		{"gt":{"run.timestamp":{"date":"today-2day"}}}
+    # 		{"gt":{"run.timestamp":{"date":"today-4day"}}}
     # 	]}
     # }
 
@@ -131,12 +131,12 @@ def main():
         a_filter = {"and": [
             {"eq": {"repo.changeset.id12": "37d777d87200"}},
             {"eq": {"run.suite.name": "mochitest"}},
-            {"ne": {"build.type": "e10s"}}
+            {"ne": {"run.type": "e10s"}}
         ]}
         b_filter = {"and": [
             {"eq": {"repo.changeset.id12": "37d777d87200"}},
             {"eq": {"run.suite.name": "mochitest"}},
-            {"eq": {"build.type": "e10s"}}
+            {"eq": {"run.type": "e10s"}}
         ]}
 
         diff(a_filter, b_filter)
