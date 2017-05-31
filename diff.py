@@ -20,7 +20,7 @@ from pyLibrary.queries.expressions import jx_expression
 ACTIVE_DATA_URL = "http://activedata.allizom.org/query"
 
 
-def diff(a_filter, b_filter):
+def diff(a_name, a_filter, b_name, b_filter):
     # COLLECT ALL COVERAGE FROM THE TWO VARIATIONS
     variables = jx_expression(a_filter).vars() | jx_expression(a_filter).vars()
 
@@ -43,7 +43,7 @@ def diff(a_filter, b_filter):
         }
     )
     source_files = json2value(result.content.decode('utf8')).data
-    Log.note("{{num}} unique files", num=len(source_files))
+    Log.note("{{num}} unique files covered", num=len(source_files))
 
     def groupby():
         count = 0
@@ -65,6 +65,7 @@ def diff(a_filter, b_filter):
     is_b = compile_expression(jx_expression(b_filter).to_python())
 
     for g, files in groupby():
+        Log.note("get {{source}} source files", source=len(files))
         raw_result = requests.post(
             ACTIVE_DATA_URL,
             data=value2json({
@@ -79,7 +80,7 @@ def diff(a_filter, b_filter):
             }).encode('utf8')
         )
         data = json2value(raw_result.content.decode('utf8')).data
-        Log.note("grab {{source}} source files ({{records}} records)", source=len(files), records=len(data))
+        Log.note("got {{source}} source files ({{records}} records)", source=len(files), records=len(data))
         for d in data:
             filename = d.source.file.name
             lines = listwrap(d.source.file.covered.line)
@@ -97,15 +98,42 @@ def diff(a_filter, b_filter):
                 cover.update(lines)
 
     # SUBTRACT COVERAGE
-    diff = FlatList()
-    for filename, cover in a_coverage.items():
-        remainder = cover - b_coverage.get(filename, set())
+    a_has_extra = FlatList()
+    for filename, a_cover in a_coverage.items():
+        b_cover = b_coverage.get(filename, set())
+        remainder = a_cover - b_cover
         if remainder:
-            diff.append({"file": filename, "count": len(remainder), "lines": remainder})
+            a_has_extra.append({
+                "file": filename,
+                "count": len(remainder),
+                "a_name": a_name,
+                "a": len(a_cover),
+                "b_name": b_name,
+                "b": len(b_cover),
+                "remainder": len(remainder)
+            })
+
+    b_has_extra = FlatList()
+    for filename, b_cover in b_coverage.items():
+        a_cover = a_coverage.get(filename, set())
+        remainder = b_cover - a_cover
+        if remainder:
+            b_has_extra.append({
+                "file": filename,
+                "count": len(remainder),
+                "a_name": a_name,
+                "a": len(a_cover),
+                "b_name": b_name,
+                "b": len(b_cover),
+                "remainder": len(remainder)
+            })
 
     # SHOW LARGEST DIFF FIRST
-    for d in jx.sort(diff, {"count": "desc"})[0:20:]:
-        Log.note("{{count}} additional lines in {{file}}", d)
+    for d in jx.sort(a_has_extra, {"count": "desc"})[0:20:]:
+        Log.note("{{a_name}} ({{a}} lines) has additional {{remainder}} lines over {{b_name}} ({{b}} lines) in {{file}}", d)
+    Log.note("---")
+    for d in jx.sort(b_has_extra, {"count": "desc"})[0:20:]:
+        Log.note("{{b_name}} ({{b}} lines) has additional {{remainder}} lines over {{a_name}} ({{a}} lines) in {{file}}", d)
 
 
 def main():
@@ -122,6 +150,25 @@ def main():
     # 	]}
     # }
 
+    # SOME SAMPLE RECORDS
+    # {
+    # 	"from":"coverage",
+    # 	"select":[
+    # 		"source.file.name",
+    # 		"source.file.total_covered",
+    # 		"source.file.total_uncovered",
+    # 		"build.type",
+    # 		"run.type",
+    # 		"run.suite.fullname",
+    # 		"run.chunk"
+    # 	],
+    # 	"where":{"and":[
+    # 		{"eq":{"repo.changeset.id12":"37d777d87200"}},
+    # 		{"eq":{"run.suite.fullname":"mochitest-plain"}},
+    # 		{"regex":{"source.file.name":".*sqlite.*"}}
+    # 	]},
+    # 	"limit":100
+    # }
 
     try:
         settings = startup.read_settings()
@@ -129,17 +176,19 @@ def main():
         Log.start(settings.debug)
 
         a_filter = {"and": [
+            # {"regex":{"source.file.name":".*sqlite.*"}},
             {"eq": {"repo.changeset.id12": "37d777d87200"}},
-            {"eq": {"run.suite.name": "mochitest"}},
-            {"ne": {"run.type": "e10s"}}
+            {"eq": {"run.suite.fullname":"mochitest-plain"}},
+            {"not": {"eq": {"run.type": "e10s"}}}
         ]}
         b_filter = {"and": [
+            # {"regex":{"source.file.name":".*sqlite.*"}},
             {"eq": {"repo.changeset.id12": "37d777d87200"}},
-            {"eq": {"run.suite.name": "mochitest"}},
+            {"eq": {"run.suite.fullname":"mochitest-plain"}},
             {"eq": {"run.type": "e10s"}}
         ]}
 
-        diff(a_filter, b_filter)
+        diff("e10s", a_filter, "non-e10s", b_filter)
     except Exception as e:
         Log.error("Problem with etl", e)
     finally:
