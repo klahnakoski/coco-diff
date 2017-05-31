@@ -176,19 +176,19 @@ def main():
         Log.start(settings.debug)
 
         a_filter = {"and": [
-            # {"regex":{"source.file.name":".*sqlite.*"}},
+            # {"regex": {"source.file.name": ".*sqlite.*"}},
             {"eq": {"repo.changeset.id12": "37d777d87200"}},
-            {"eq": {"run.suite.fullname":"mochitest-plain"}},
+            {"eq": {"run.suite.fullname": "mochitest-plain"}},
             {"not": {"eq": {"run.type": "e10s"}}}
         ]}
         b_filter = {"and": [
-            # {"regex":{"source.file.name":".*sqlite.*"}},
+            # {"regex": {"source.file.name": ".*sqlite.*"}},
             {"eq": {"repo.changeset.id12": "37d777d87200"}},
-            {"eq": {"run.suite.fullname":"mochitest-plain"}},
+            {"eq": {"run.suite.fullname": "mochitest-plain"}},
             {"eq": {"run.type": "e10s"}}
         ]}
 
-        diff("e10s", a_filter, "non-e10s", b_filter)
+        diff("non-e10s", a_filter, "e10s", b_filter)
     except Exception as e:
         Log.error("Problem with etl", e)
     finally:
