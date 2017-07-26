@@ -31,7 +31,7 @@ def status():
             {"name": "rev", "value": "repo.changeset.id12"}
         ],
         "where": {"and": [
-            {"eq": {"repo.changeset.id12": "0985725c848e"}},
+            # {"eq": {"repo.changeset.id12": "60a5308fa987"}},
             {"eq": {"treeherder.jobKind": "test"}},
             {"eq": {"build.type": "ccov"}},
             {"gt": {"action.start_time": {"date": "today-3day"}}}
@@ -47,13 +47,13 @@ def status():
         total_tasks = set(runs.task)
         response = requests.get(ACTIVEDATA, data=value2json({
             "from": "coverage",
-            "select": "task.id",
+            "edges": {"name": "task", "value": "task.id"},
             "where": {"eq": {"repo.changeset.id12": g.rev}},
             "format": "list",
             "limit": 10000
         }))
 
-        ingested_tasks = set(json2value(response.content.decode("utf8")).data)
+        ingested_tasks = set(json2value(response.content.decode("utf8")).data.task)
         task_rate = len(ingested_tasks) / len(total_tasks)
 
         files_processed = {}
@@ -64,22 +64,22 @@ def status():
         if ingested_tasks:
             response = requests.get(ACTIVEDATA, data=value2json({
                 "from": "coverage",
-                "select": "source.file.name",
+                "edges": {"name":"file", "value":"source.file.name"},
                 "where": {"eq": {"repo.changeset.id12": g.rev}},
                 "format": "list",
                 "limit": 100000
             }))
-            files_processed = set(json2value(response.content.decode("utf8")).data)
+            files_processed = set(json2value(response.content.decode("utf8")).data.file)
 
             # find files in the `coverage` table
             response = requests.get(ACTIVEDATA, data=value2json({
                 "from": "coverage-summary",
-                "select": "source.file.name",
+                "edges": {"name":"file", "value":"source.file.name"},
                 "where": {"eq": {"repo.changeset.id12": g.rev}},
                 "format": "list",
                 "limit": 100000
             }))
-            summary_files = set(json2value(response.content.decode("utf8")).data)
+            summary_files = set(json2value(response.content.decode("utf8")).data.file)
             if files_processed:
                 file_rate = len(summary_files) / len(files_processed)
             else:
@@ -97,6 +97,15 @@ def status():
             files_processed=len(files_processed),
             file_rate=file_rate
         )
+
+        missing_tasks = total_tasks - ingested_tasks
+        if missing_tasks:
+            Log.note("{{num}} MISSING TASKS : {{missing|json}}", missing=sorted(list(missing_tasks))[:3], num=len(missing_tasks))
+        else:
+            # BE MORE DISCRIMINATING
+            missing_files = files_processed - summary_files
+            if missing_files:
+                Log.note("{{num}} MISSING FILES : {{missing|json}}", missing=sorted(list(missing_files))[:3], num=len(missing_files))
 
 
 status()
