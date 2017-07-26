@@ -1,8 +1,12 @@
 {
 
+	"work_queue": {
+		"name": "active-data-etl",
+		"debug": true,
+		"$ref": "file://~/private.json#aws_credentials"
+	},
 
 	"debug":{
-
 		"trace":true
 	}
 }

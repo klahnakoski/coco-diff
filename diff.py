@@ -10,14 +10,17 @@ from __future__ import division
 from __future__ import unicode_literals
 
 import requests
-from mo_dots import FlatList, listwrap
+from mo_dots import FlatList, listwrap, wrap, set_default
 from mo_json import json2value, value2json
 from mo_logs import Log, startup, constants
+from mo_times import Date
+from pyLibrary import aws
 from pyLibrary.queries import jx
 from pyLibrary.queries.expression_compiler import compile_expression
 from pyLibrary.queries.expressions import jx_expression
 
 ACTIVE_DATA_URL = "http://activedata.allizom.org/query"
+SHOW_MISSING = False
 
 
 def diff(a_name, a_filter, b_name, b_filter):
@@ -136,8 +139,122 @@ def diff(a_name, a_filter, b_name, b_filter):
         Log.note("{{b_name}} ({{b}} lines) has additional {{remainder}} lines over {{a_name}} ({{a}} lines) in {{file}}", d)
 
 
-def main():
+def confirm_coverage(
+    settings,
+    _filter,
+    groupby="repo.changeset.id12",
+    add_missing_to_queue=False
+):
+    """
+    CONFIRM WE HAVE COVERAGE 
+    """
+    Log.note("begin review")
 
+    # ALL TASKS FOR A REVISION
+    result = requests.post(
+        ACTIVE_DATA_URL,
+        json={
+            "from": "task",
+            "select": (
+                [
+                    {"name": "id", "value": "etl.id"},
+                    {"name": "source.id", "value": "etl.source.id"},
+                ] + list(
+                    {
+                        "repo.changeset.id12",
+                        "build.type",
+                        "run.type",
+                        "run.suite",
+                        "action.start_time"
+                    } |
+                    set(listwrap(groupby))
+                )
+            ),
+            "where": {"and": [
+                _filter,
+                {"eq": {"build.type": "ccov"}}
+            ]},
+            "format": "list",
+            "limit": 10000
+        }
+    )
+    all_tasks = json2value(result.content.decode('utf8')).data
+
+    for g, tasks in jx.groupby(all_tasks, groupby):
+        # FIND ALL COVERAGE
+        result = requests.post(
+            ACTIVE_DATA_URL,
+            json={
+                "from": "coverage",
+                "groupby": [
+                    {"name": "source.id", "value": "etl.source.source.source.id"},
+                    {"name": "id", "value": "etl.source.source.id"}
+                ],
+                "where": {"and": [
+                    _filter,
+                    {"or": [
+                        {"eq": {
+                            "etl.source.source.source.id": e.source.id,
+                            "etl.source.source.id": e.id
+                        }}
+                        for e in tasks
+                    ]}
+                ]},
+                "format": "list",
+                "limit": 10000
+            }
+        )
+        coverage = json2value(result.content.decode('utf8')).data
+        Log.note("found {{num}} coverage", num=len(coverage))
+        # Log.note("found {{coverage}}", coverage=coverage)
+        # REVIEW
+        found = []
+        not_found = []
+        for task in tasks:
+            for cov in coverage:
+                if cov.count < 1000:
+                    continue
+                if cov.id == task.id and cov.source.id == task.source.id:
+                    found.append(task)
+                    break
+            else:
+                not_found.append(task)
+
+        summary = set_default({"tasks": len(tasks), "coverage": len(tasks)-len(not_found)}, g)
+        Log.note("Summary\n{{ccov|json}}", ccov=summary)
+        if SHOW_MISSING:
+            Log.note("Details\n{{missing}}", missing=not_found)
+
+        # TRIGGER REPROCESSING
+        if add_missing_to_queue:
+            work_queue = aws.Queue(kwargs=settings.work_queue)
+            work_queue.extend([
+                {
+                    "key": "tc." + unicode(n.source.key),
+                    "bucket": "active-data-taskcluster-normalized",
+                    "destination": "active-data-codecoverage",
+                    "timestamp": Date.now()
+                }
+                for n in not_found
+            ])
+
+
+def verify_past_coverage(settings):
+    confirm_coverage(
+        settings,
+        {"and": [
+            {"eq": {"repo.changeset.id12": "c55e582aee5f"}},
+            # {"gte": {"action.start_time": {"date": "today"}}},
+            # {"lt": {"action.start_time": {"date": "today+day"}}}
+        ]},
+        groupby=["repo.changeset.id12", "repo.push.date"]
+    )
+
+
+
+
+
+def main():
     # FIND A REVISION WITH e10s
     # {
     # 	"from":"task",
@@ -175,24 +292,53 @@ def main():
         constants.set(settings.constants)
         Log.start(settings.debug)
 
-        a_filter = {"and": [
-            # {"regex": {"source.file.name": ".*sqlite.*"}},
-            {"eq": {"repo.changeset.id12": "37d777d87200"}},
-            {"eq": {"run.suite.fullname": "mochitest-plain"}},
-            {"not": {"eq": {"run.type": "e10s"}}}
-        ]}
-        b_filter = {"and": [
-            # {"regex": {"source.file.name": ".*sqlite.*"}},
-            {"eq": {"repo.changeset.id12": "37d777d87200"}},
-            {"eq": {"run.suite.fullname": "mochitest-plain"}},
-            {"eq": {"run.type": "e10s"}}
-        ]}
+        verify_past_coverage(settings)
 
-        diff("non-e10s", a_filter, "e10s", b_filter)
+        # confirm_coverage(
+        #     settings,
+        #     {"and": [
+        #         {"gte":{"action.start_date":{"date":"today-3day"}}},
+        #         {"eq": {"run.suite.fullname": "firefox-ui-functional local"}},
+        #         {"eq": {"repo.changeset.id12": "bc9e028dbdc5"}}
+        #     ]}
+        # )
+
+
+
+        # a_filter = {"and": [
+        #     {"eq": {"run.suite.fullname": "firefox-ui-functional local"}},
+        #     {"eq": {"repo.changeset.id12": "bc9e028dbdc5"}},
+        #     {"not": {"eq": {"run.type": "e10s"}}}
+        # ]}
+        # b_filter = {"and": [
+        #     {"eq": {"run.suite.fullname": "firefox-ui-functional local"}},
+        #     {"eq": {"repo.changeset.id12": "bc9e028dbdc5"}},
+        #     {"eq": {"run.type": "e10s"}}
+        # ]}
+        #
+        # diff("non-e10s", a_filter, "e10s", b_filter)
+
+
+
+        # a_filter = {"and": [
+        #     # {"regex": {"source.file.name": ".*sqlite.*"}},
+        #     {"eq": {"repo.changeset.id12": "7c4ca88d519f"}},
+        #     {"eq": {"run.suite.fullname": "mochitest-plain"}},
+        #     {"not": {"eq": {"run.type": "e10s"}}}
+        # ]}
+        # b_filter = {"and": [
+        #     # {"regex": {"source.file.name": ".*sqlite.*"}},
+        #     {"eq": {"repo.changeset.id12": "7c4ca88d519f"}},
+        #     {"eq": {"run.suite.fullname": "mochitest-plain"}},
+        #     {"eq": {"run.type": "e10s"}}
+        # ]}
+        #
+        # diff("non-e10s", a_filter, "e10s", b_filter)
     except Exception as e:
         Log.error("Problem with etl", e)
     finally:
         Log.stop()
+
 
 if __name__ == "__main__":
     main()
