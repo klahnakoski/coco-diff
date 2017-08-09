@@ -14,6 +14,7 @@ from mo_json import value2json, json2value
 from mo_logs import Log
 from jx_python import jx
 
+DEBUG = False
 ACTIVEDATA = "http://activedata.allizom.org/query"
 
 
@@ -32,8 +33,12 @@ def status():
             {"name": "branch", "value": "repo.branch.name"}
         ],
         "where": {"and": [
+            # {"eq": {"repo.changeset.id12": "47248637eafa"}},
             {"eq": {"treeherder.jobKind": "test"}},
-            {"eq": {"build.type": "ccov"}},
+            {"or": [
+                {"eq": {"build.platform": "linux64-jsdcov"}},
+                {"in": {"build.type": ["jsdcov", "ccov"]}}
+            ]},
             {"gt": {"action.start_time": {"date": "today-3day"}}}
         ]},
         "limit": 10000,
@@ -45,6 +50,8 @@ def status():
     for g, runs in jx.groupby(coverage_runs, ["rev", "branch"], contiguous=True):
         # find tasks in `coverage` table
         total_tasks = set(runs.task)
+        if DEBUG:
+            Log.note("{{num}} tasks:\n{{tasks}}", num=len(total_tasks), tasks=jx.sort(total_tasks))
         response = requests.get(ACTIVEDATA, data=value2json({
             "from": "coverage",
             "edges": {"name": "task", "value": "task.id"},
@@ -54,6 +61,9 @@ def status():
         }))
 
         ingested_tasks = set(json2value(response.content.decode("utf8")).data.task) - {None}
+        if DEBUG:
+            Log.note("{{num}} ingested:\n{{tasks}}", num=len(ingested_tasks), tasks=jx.sort(ingested_tasks))
+
         task_rate = len(ingested_tasks) / len(total_tasks)
 
         files_processed = {}
@@ -109,4 +119,7 @@ def status():
                 Log.note("{{num}} MISSING FILES : {{missing|json}}", missing=sorted(list(missing_files))[:3], num=len(missing_files))
 
 
-status()
+try:
+    status()
+except Exception as e:
+    Log.error("problem", cause=e)
