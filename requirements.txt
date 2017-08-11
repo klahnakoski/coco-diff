@@ -1,6 +1,7 @@
 future
 mo-logs
-mo_dots
-mo_json
+mo-dots
+mo-json
+jx-python
 pyLibrary
 requests

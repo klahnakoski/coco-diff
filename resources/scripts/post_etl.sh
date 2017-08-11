@@ -2,5 +2,5 @@
 
 
 export PYTHONPATH=.
-cd ~/ActiveData
-python ./active_data/jobs/codecoverage.py --settings=./resources/config/codecoverage.json
+cd ~/coco-diff
+python ./coco/post_etl.py --settings=./resources/config/codecoverage.json

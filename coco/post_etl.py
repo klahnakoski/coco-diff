@@ -240,7 +240,7 @@ def main():
                 please_stop=please_stop
             )
             Thread.wait_for_shutdown_signal(please_stop)
-    except Exception, e:
+    except Exception as e:
         Log.error("Problem with code coverage score calculation", cause=e)
     finally:
         Log.stop()
