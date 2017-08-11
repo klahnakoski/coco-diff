@@ -230,7 +230,7 @@ def confirm_coverage(
             work_queue = aws.Queue(kwargs=settings.work_queue)
             work_queue.extend([
                 {
-                    "key": "tc." + unicode(n.source.key),
+                    "key": "tc." + text_type(n.source.key),
                     "bucket": "active-data-taskcluster-normalized",
                     "destination": "active-data-codecoverage",
                     "timestamp": Date.now()
