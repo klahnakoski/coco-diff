@@ -35,9 +35,12 @@ def status():
         "where": {"and": [
             # {"eq": {"repo.changeset.id12": "47248637eafa"}},
             {"eq": {"treeherder.jobKind": "test"}},
+            {"eq": {"repo.branch.name": "mozilla-central"}},
+            {"eq": {"task.run.state": "completed"}},
             {"or": [
-                {"eq": {"build.platform": "linux64-jsdcov"}},
-                {"in": {"build.type": ["jsdcov", "ccov"]}}
+                # {"eq": {"build.platform": "linux64-jsdcov"}},
+                # {"eq": {"build.type": "jsdcov"}},
+                {"eq": {"build.type": "ccov"}}
             ]},
             {"gt": {"action.start_time": {"date": "today-3day"}}}
         ]},
