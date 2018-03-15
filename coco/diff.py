@@ -10,14 +10,15 @@ from __future__ import division
 from __future__ import unicode_literals
 
 import requests
+from jx_base.expressions import jx_expression
+from jx_python import jx
+from jx_python.expression_compiler import compile_expression
 from mo_dots import FlatList, listwrap, wrap, set_default
+from mo_future import text_type
 from mo_json import json2value, value2json
 from mo_logs import Log, startup, constants
 from mo_times import Date
 from pyLibrary import aws
-from pyLibrary.queries import jx
-from pyLibrary.queries.expression_compiler import compile_expression
-from pyLibrary.queries.expressions import jx_expression
 
 ACTIVE_DATA_URL = "http://activedata.allizom.org/query"
 SHOW_MISSING = False
@@ -146,7 +147,7 @@ def confirm_coverage(
     add_missing_to_queue=False
 ):
     """
-    CONFIRM WE HAVE COVERAGE 
+    CONFIRM WE HAVE COVERAGE
     """
     Log.note("begin review")
 
@@ -249,10 +250,6 @@ def verify_past_coverage(settings):
         ]},
         groupby=["repo.changeset.id12", "repo.push.date"]
     )
-
-
-
-
 
 def main():
     # FIND A REVISION WITH e10s

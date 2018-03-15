@@ -3,4 +3,4 @@
 
 export PYTHONPATH=.
 cd ~/coco-diff
-python ./coco/post_etl.py --settings=./resources/config/post_etl.json
+python ./coco/post_etl.py --settings=./resources/config/post_etl.json >& /dev/null < /dev/null

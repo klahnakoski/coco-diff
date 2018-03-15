@@ -29,12 +29,12 @@ NUM_THREAD = 4
 
 def process_batch(todo_queue, revision, coverage_index, coverage_summary_index, settings, please_stop):
     """
-    :param todo: list of files to process as a single block 
-    :param coverage_index: 
-    :param coverage_summary_index: 
-    :param settings: 
-    :param please_stop: 
-    :return: 
+    :param todo: list of files to process as a single block
+    :param coverage_index:
+    :param coverage_summary_index:
+    :param settings:
+    :param please_stop:
+    :return:
     """
 
     for todo in todo_queue:
@@ -150,30 +150,20 @@ def loop(source, coverage_summary_index, settings, please_stop):
             with Timer("Pulling work from index {{index}}", param={"index": index_name}):
                 revisions = http.post_json(settings.url, json={
                     "from": "coverage",
-                    "groupby": ["build.revision12", "repo.push.date"],
+                    "groupby": ["repo.changeset.id12", "repo.changeset.date"],
                     "where": {"and": [
-                        {"gte": {"repo.push.date": push_date_filter}}
+                        {"gte": {"repo.changeset.date": push_date_filter}}
                     ]},
                     "format": "list",
-                    "sort": "repo.push.date",
+                    "sort": {"repo.changeset.date": "desc"},
                     "limit": 10000
                 }).data
 
-                for rev in revisions.build.revision12:
-                    todo = http.post_json(settings.url, json={
-                        "from": "coverage",
-                        "groupby": ["source.file.name"],
-                        "where": {"and": [
-                            {"eq": {"build.revision12": rev}},
-                            {"neq": {"source.file.total_covered": 0}},
-                            {"missing": "source.method.name"}
-                        ]},
-                        "format": "list",
-                        "limit": 100000
-                    })
+                for rev in revisions.repo.changeset.id12:
+                    todo = get_todo_list(settings, rev)
 
                     queue = Queue("pending source files to review")
-                    queue.extend(_groupby_size(todo.data, size=10000))
+                    queue.extend(_groupby_size(todo, size=10000))
 
                     num_threads = coalesce(settings.threads, NUM_THREAD)
                     Log.note("Launch {{num}} threads", num=num_threads)
@@ -218,6 +208,48 @@ def _groupby_size(items, size):
         output.append(i)
     if output:
         yield wrap(output)
+
+
+def get_todo_list(settings, rev):
+    query = http.post_json(settings.url, json={
+        "from": "coverage",
+        "select": [
+            {"name": "count", "aggregate": "cardinality", "value": "source.file.name"}
+        ],
+        "groupby": [{
+            "name": "file",
+            "value": {"left": [
+                "source.file.name",
+                {"find": {"source.file.name": "/"}}
+            ]}
+        }],
+        "format": "list",
+        "limit": 1000,
+        "where": {"and": [
+            {"gt": {"source.file.total_covered": 0}},
+            {"prefix": {"repo.changeset.id": rev}},
+            {"missing": "source.method.name"},
+            {"exists": "source.file.is_firefox"}
+        ]}
+    })
+
+    for block in _groupby_size(query.data).file:
+        files = http.post_json(settings.url, json={
+            "from": "coverage",
+            "groupby": ["source.file.name"],
+            "where": {"and": [
+                {"eq": {"repo.changeset.id12": rev}},
+                {"neq": {"source.file.total_covered": 0}},
+                {"missing": "source.method.name"},
+                {"exists": "source.file.is_firefox"},
+                {"or": [{"prefix": {"source.file.name": p+"/"}} for p in block]}
+            ]},
+            "format": "list",
+            "limit": 100000
+        })
+
+        for f in files:
+            yield f
 
 
 def main():
