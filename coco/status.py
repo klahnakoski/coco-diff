@@ -10,39 +10,43 @@ from __future__ import division
 from __future__ import unicode_literals
 
 import requests
-from mo_json import value2json, json2value
-from mo_logs import Log
 from jx_python import jx
+from mo_json import value2json, json2value
+from mo_logs import Log, startup
+from mo_times import Date
+from pyLibrary import aws
 
 DEBUG = False
-ACTIVEDATA = "http://activedata.allizom.org/query"
+ACTIVEDATA = "http://54.149.21.8/query"
 
 
-def status():
+def status(config):
     """
     PRINT OUT THE CODE COVERAGE ETL PIPELINE STATUS
     """
+
+    work_queue = aws.Queue(config.work_queue)
 
     # determine the tasks that generated coverage
     response = requests.get(ACTIVEDATA, data=value2json({
         "from": "task",
         "select": [
+            "_id",
             {"name": "date", "value": "repo.changeset.date"},
             {"name": "task", "value": "task.id"},
             {"name": "rev", "value": "repo.changeset.id12"},
             {"name": "branch", "value": "repo.branch.name"}
         ],
         "where": {"and": [
-            # {"eq": {"repo.changeset.id12": "47248637eafa"}},
+            # {"in": {"repo.changeset.id12": ["dcb3a3ba9065", "6369d1c6526b"]}},
             {"eq": {"treeherder.jobKind": "test"}},
-            {"eq": {"repo.branch.name": "mozilla-central"}},
+            # {"eq": {"repo.branch.name": "mozilla-central"}},
             {"eq": {"task.run.state": "completed"}},
             {"or": [
-                # {"eq": {"build.platform": "linux64-jsdcov"}},
-                # {"eq": {"build.type": "jsdcov"}},
                 {"eq": {"build.type": "ccov"}}
             ]},
-            {"gt": {"action.start_time": {"date": "today-3day"}}}
+            {"lt": {"action.end_time": {"date": "today"}}},
+            {"gte": {"action.end_time": {"date": "today-3day"}}}
         ]},
         "limit": 10000,
         "format": "list"
@@ -115,6 +119,23 @@ def status():
         missing_tasks = total_tasks - ingested_tasks
         if missing_tasks:
             Log.note("{{num}} MISSING TASKS : {{missing|json}}", missing=sorted(list(missing_tasks))[:3], num=len(missing_tasks))
+
+            missing_runs = set(
+                run._id.split(":")[0]
+                for miss in missing_tasks
+                for run in coverage_runs
+                if run.task == miss
+            )
+            Log.note("sending keys for rerun: {{keys|json}}", keys=missing_runs)
+            work_queue.extend([
+                {
+                    "key": id,
+                    "bucket": "active-data-task-cluster-normalized",
+                    "destination": "active-data-codecoverage",
+                    "timestamp": Date.now()
+                }
+                for id in missing_runs
+            ])
         else:
             # BE MORE DISCRIMINATING
             missing_files = files_processed - summary_files
@@ -122,7 +143,14 @@ def status():
                 Log.note("{{num}} MISSING FILES : {{missing|json}}", missing=sorted(list(missing_files))[:3], num=len(missing_files))
 
 
-try:
-    status()
-except Exception as e:
-    Log.error("problem", cause=e)
+if __name__ == "__main__":
+    try:
+        config = startup.read_settings()
+        Log.start(config.debug)
+        status(config)
+    except Exception as e:
+        Log.error("Problem with code coverage score calculation", cause=e)
+    finally:
+        Log.stop()
+
+
