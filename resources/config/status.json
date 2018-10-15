@@ -1,0 +1,31 @@
+{
+
+	"work_queue": {
+		"name": "active-data-etl",
+		"debug": true,
+		"$ref": "file://~/private.json#aws_credentials"
+	},
+	"debug": {
+		"trace": true,
+		"cprofile": false,
+		"log": [
+			{
+				"log_type": "console"
+			},
+			{
+				"class": "logging.handlers.RotatingFileHandler",
+				"filename": "/logs/coco_diff_status.log",
+				"maxBytes": 10000000,
+				"backupCount": 10,
+				"encoding": "utf8"
+			},
+			{
+				"log_type": "ses",
+				"from_address": "klahnakoski@mozilla.com",
+				"to_address": "klahnakoski@mozilla.com",
+				"subject": "[ALERT][Manager] Problem in coco-diff status.py",
+				"$ref": "file://~/private.json#aws_credentials"
+			}
+		]
+	}
+}

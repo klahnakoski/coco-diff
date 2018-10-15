@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
 
-export PYTHONPATH=.
+export PYTHONPATH=.:vendor
 cd ~/coco-diff
-python ./coco/status.py  >& /dev/null < /dev/null
+python ./coco/status.py  --settings=./resources/config/status.json >& /dev/null < /dev/null
