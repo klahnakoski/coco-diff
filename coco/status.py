@@ -45,8 +45,8 @@ def status(config):
             {"or": [
                 {"eq": {"build.type": "ccov"}}
             ]},
-            {"lt": {"action.end_time": {"date": "today"}}},
-            {"gte": {"action.end_time": {"date": "today-3day"}}}
+            {"lt": {"action.end_time": {"date": "now-6hour"}}},
+            {"gte": {"action.end_time": {"date": "now-3day"}}}
         ]},
         "limit": 10000,
         "format": "list"
