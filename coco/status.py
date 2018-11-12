@@ -17,7 +17,7 @@ from mo_times import Date
 from pyLibrary import aws
 
 DEBUG = False
-ACTIVEDATA = "http://54.149.21.8/query"
+ACTIVEDATA = "https://activedata.allizom.org/query"
 
 
 def status(config):
