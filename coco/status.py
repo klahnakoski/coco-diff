@@ -24,7 +24,7 @@ def status(config):
     """
     PRINT OUT THE CODE COVERAGE ETL PIPELINE STATUS
     """
-
+    sent_for_rerun = {}
     work_queue = aws.Queue(config.work_queue)
 
     # determine the tasks that generated coverage
@@ -126,7 +126,11 @@ def status(config):
                 for run in coverage_runs
                 if run.task == miss
             )
-            Log.note("sending keys for rerun: {{keys|json}}", keys=missing_runs)
+
+            net_send = missing_runs - sent_for_rerun
+            sent_for_rerun |= missing_runs
+
+            Log.note("sending keys for rerun (not already sent): {{keys|json}}", keys=net_send)
             work_queue.extend([
                 {
                     "key": id,
@@ -134,7 +138,7 @@ def status(config):
                     "destination": "active-data-codecoverage",
                     "timestamp": Date.now()
                 }
-                for id in missing_runs
+                for id in net_send
             ])
         else:
             # BE MORE DISCRIMINATING
