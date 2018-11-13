@@ -24,7 +24,7 @@ def status(config):
     """
     PRINT OUT THE CODE COVERAGE ETL PIPELINE STATUS
     """
-    sent_for_rerun = {}
+    sent_for_rerun = set()
     work_queue = aws.Queue(config.work_queue)
 
     # determine the tasks that generated coverage
@@ -51,10 +51,10 @@ def status(config):
         "limit": 10000,
         "format": "list"
     }))
-    coverage_runs = jx.sort(json2value(response.content.decode("utf8")).data, [{"date": "desc"}, "branch"])
+    coverage_runs = json2value(response.content.decode("utf8")).data
 
     # FOR EACH REVISION, GET STATS
-    for g, runs in jx.groupby(coverage_runs, ["rev", "branch"], contiguous=True):
+    for g, runs in jx.groupby(coverage_runs, ["rev", "branch"]):
         # find tasks in `coverage` table
         total_tasks = set(runs.task)
         if DEBUG:
